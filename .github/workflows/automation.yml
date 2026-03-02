@@ -1,0 +1,53 @@
+name: Hacker News Intelligence Bot
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        
+    - name: Run HN Intel Bot
+      env:
+        KEYWORDS: ${{ secrets.KEYWORDS }}
+        MIN_SCORE: ${{ secrets.MIN_SCORE || '10' }}
+        MAX_AGE_HOURS: ${{ secrets.MAX_AGE_HOURS || '24' }}
+        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      run: |
+        python bot.py
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: hn-reports
+        path: |
+          report.md
+          data.json
+        retention-days: 30
+        
+    - name: Commit reports to repository
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        mkdir -p reports
+        cp report.md reports/report-$(date +%Y%m%d-%H%M).md
+        cp data.json reports/data-$(date +%Y%m%d-%H%M).json
+        git add reports/
+        git commit -m "Add HN intel report $(date +%Y-%m-%d_%H:%M)" || exit 0
+        git push
